@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">Electronic Music Score</string>
+
+    <string name="action_go_back">Go Back</string>
+    <string name="action_next">Next</string>
+    <string name="action_authorise">Authorise</string>
+    <string name="action_cancel">Cancel</string>
+
+    <string name="fab_desc_continue">Next slide</string>
+    <string name="fab_desc_authorise">Give permission</string>
+
+    <string name="button_desc_connect">Connect</string>
+    <string name="button_desc_menu">Menu</string>
+
+    <string name="dialog_connect_device_title">Pair with %s</string>
+    <string name="dialog_connect_device_body">You will pair your device with %s, do you want to continue?</string>
+    <string name="dialog_connect_device_confirm">Connect</string>
+
+    <string name="screen_title_main">Home</string>
+</resources>

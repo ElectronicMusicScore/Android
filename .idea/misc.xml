@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DesignSurface">
+    <option name="filePathToZoomLevelMap">
+      <map>
+        <entry key="..\:/Users/Arnym/GitProjects/ElectronicMusicScore-Android/app/src/main/java/com/arnyminerz/electronicmusicscore/android/activity/MainActivity.kt" value="1.4646464646464648" />
+        <entry key="..\:/Users/Arnym/GitProjects/ElectronicMusicScore-Android/app/src/main/java/com/arnyminerz/electronicmusicscore/android/ui/elements/CardPanelRow.kt" value="0.4027777777777778" />
+        <entry key="..\:/Users/Arnym/GitProjects/ElectronicMusicScore-Android/app/src/main/java/com/arnyminerz/electronicmusicscore/android/ui/elements/ToggleButton.kt" value="0.4" />
+        <entry key="..\:/Users/Arnym/GitProjects/ElectronicMusicScore-Android/app/src/main/java/com/arnyminerz/electronicmusicscore/android/ui/intro/IntroPage.kt" value="0.2" />
+        <entry key="..\:/Users/Arnym/GitProjects/ElectronicMusicScore-Android/app/src/main/java/com/arnyminerz/electronicmusicscore/android/ui/intro/IntroWindow.kt" value="0.33164556962025316" />
+        <entry key="..\:/Users/Arnym/GitProjects/ElectronicMusicScore-Android/app/src/main/java/com/arnyminerz/electronicmusicscore/android/ui/intro/bt/BtListDevice.kt" value="0.4" />
+        <entry key="..\:/Users/Arnym/GitProjects/ElectronicMusicScore-Android/app/src/main/java/com/arnyminerz/electronicmusicscore/android/ui/screen/Main.kt" value="0.4" />
+      </map>
+    </option>
+  </component>
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_11" default="true" project-jdk-name="11" project-jdk-type="JavaSDK" />
+</project>
