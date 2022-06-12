@@ -13,7 +13,9 @@ import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
+import androidx.compose.runtime.mutableStateOf
 import com.arnyminerz.electronicmusicscore.android.wireless.ble.BLEService.LocalBinder
+import com.arnyminerz.electronicmusicscore.android.wireless.wifi.ScanNetworkData
 import timber.log.Timber
 import java.util.UUID
 
@@ -59,6 +61,8 @@ class BLEService : Service() {
     private lateinit var bleHandler: Handler
 
     private var device: BluetoothDevice? = null
+
+    val networksInRange = mutableStateOf(emptyList<ScanNetworkData>())
 
     override fun onBind(intent: Intent): IBinder = binder
 
@@ -190,10 +194,13 @@ class BLEService : Service() {
                 }
                 .with { _, data ->
                     val dataValue = data.value ?: return@with
-                    val str = String(dataValue)
+                    val wList = String(dataValue)
                         .let { it.substring(0, it.lastIndexOf((0x19).toChar())) }
                         .split((0x19).toChar())
-                    Timber.i("Got data for wifi scan: $str")
+                        .map { it.split((0x0A).toChar()) }
+                    networksInRange.value = wList
+                        .map { ScanNetworkData(it[0], it[1].toShort()) }
+                    Timber.i("Got data for wifi scan: $wList")
                 }
                 .enqueue()
         }
