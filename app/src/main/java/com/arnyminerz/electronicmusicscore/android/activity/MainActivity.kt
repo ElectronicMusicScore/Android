@@ -9,7 +9,30 @@ import android.os.IBinder
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.ListItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.NetworkWifi
+import androidx.compose.material.icons.outlined.NetworkWifi1Bar
+import androidx.compose.material.icons.outlined.NetworkWifi2Bar
+import androidx.compose.material.icons.outlined.NetworkWifi3Bar
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.arnyminerz.electronicmusicscore.android.preferences.Keys
 import com.arnyminerz.electronicmusicscore.android.ui.theme.ElectronicMusicScoreTheme
 import com.arnyminerz.electronicmusicscore.android.utils.dataStore
@@ -20,6 +43,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 
+@ExperimentalMaterialApi
+@ExperimentalMaterial3Api
 class MainActivity : AppCompatActivity() {
     private val introRequest =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -28,17 +53,18 @@ class MainActivity : AppCompatActivity() {
                 doAsync { performConnection() }
         }
 
-    private var bluetoothService: BLEService? = null
+    private var bluetoothService = mutableStateOf<BLEService?>(null)
 
     private val serviceConnection: ServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(componentName: ComponentName?, service: IBinder?) {
-            bluetoothService = (service as BLEService.LocalBinder).getService()
-                .also {
-                    if (!it.initialize()) {
-                        Timber.e("Could not initialize Bluetooth service")
-                        finish()
-                    } else Timber.i("Bluetooth service initialized successfully.")
-                }
+            bluetoothService.value =
+                (service as BLEService.LocalBinder).getService()
+                    .also {
+                        if (!it.initialize()) {
+                            Timber.e("Could not initialize Bluetooth service")
+                            finish()
+                        } else Timber.i("Bluetooth service initialized successfully.")
+                    }
             try {
                 performConnection()
             } catch (e: IllegalStateException) {
@@ -47,7 +73,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onServiceDisconnected(componentName: ComponentName?) {
-            bluetoothService = null
+            bluetoothService.value = null
         }
     }
 
@@ -61,7 +87,8 @@ class MainActivity : AppCompatActivity() {
      */
     @Throws(IllegalStateException::class)
     private fun performConnection(): Boolean {
-        if (bluetoothService == null) {
+        val btService = bluetoothService.value
+        if (btService == null) {
             Timber.e("Bluetooth service not initialized.")
             return false
         }
@@ -72,7 +99,7 @@ class MainActivity : AppCompatActivity() {
         } ?: throw IllegalStateException("There's no stored device mac address to connect to.")
 
         Timber.i("Connecting to device ($mac)...")
-        return bluetoothService?.connect(mac) ?: return false
+        return btService.connect(mac)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,13 +111,70 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             ElectronicMusicScoreTheme {
-                Text("Hello world!")
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                    ) {
+                        val btService by bluetoothService
+                        if (btService != null) {
+                            val networks by btService!!.networksInRange
+                            LazyColumn {
+                                items(networks) { network ->
+                                    ListItem(
+                                        icon = {
+                                            Icon(
+                                                if (network.rssi < -80)
+                                                    Icons.Outlined.NetworkWifi1Bar
+                                                else if (network.rssi < -50)
+                                                    Icons.Outlined.NetworkWifi2Bar
+                                                else if (network.rssi < -30)
+                                                    Icons.Outlined.NetworkWifi3Bar
+                                                else
+                                                    Icons.Outlined.NetworkWifi,
+                                                contentDescription = "Wifi signal",
+                                            )
+                                        },
+                                        trailing = {
+                                            IconButton(onClick = { /*TODO*/ }) {
+                                                Icon(
+                                                    Icons.Rounded.Link,
+                                                    "Connect"
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Text(
+                                            text = network.ssid,
+                                            // color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            // modifier = Modifier
+                                            //     .fillMaxWidth(),
+                                        )
+                                    }
+                                }
+                            }
+                        } else
+                            Text(
+                                "BLE service not available",
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                    }
+                }
             }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        bluetoothService?.close()
+        bluetoothService.value?.close()
     }
 }
