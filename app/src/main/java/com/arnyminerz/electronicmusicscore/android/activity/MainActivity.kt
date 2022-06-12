@@ -1,25 +1,20 @@
 package com.arnyminerz.electronicmusicscore.android.activity
 
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material3.Text
 import com.arnyminerz.electronicmusicscore.android.preferences.Keys
 import com.arnyminerz.electronicmusicscore.android.ui.theme.ElectronicMusicScoreTheme
 import com.arnyminerz.electronicmusicscore.android.utils.dataStore
 import com.arnyminerz.electronicmusicscore.android.utils.doAsync
-import com.arnyminerz.electronicmusicscore.android.utils.ifFalse
 import com.arnyminerz.electronicmusicscore.android.wireless.ble.BLEService
-import com.arnyminerz.electronicmusicscore.android.wireless.ble.BLEService.Companion.BROADCAST_INTENT_EXTRA_MAC_KEY
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
@@ -46,33 +41,13 @@ class MainActivity : AppCompatActivity() {
                 }
             try {
                 performConnection()
-            }catch (e: IllegalStateException) {
+            } catch (e: IllegalStateException) {
                 introRequest.launch(Intent(this@MainActivity, IntroActivity::class.java))
             }
         }
 
         override fun onServiceDisconnected(componentName: ComponentName?) {
             bluetoothService = null
-        }
-    }
-
-    private val connectedReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent?) {
-            intent
-                ?.extras
-                ?.getString(BROADCAST_INTENT_EXTRA_MAC_KEY)
-                ?.let { macAddress -> Timber.i("Connected successfully to $macAddress.") }
-        }
-    }
-
-    private val gattServicesReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent?) {
-            val services = bluetoothService?.getSupportedGattServices() ?: return
-            Timber.i("Target device has ${services.size} services:")
-            for (service in services) {
-                Timber.i("- ${service.uuid}")
-                Timber.i("  Characteristics count: ${service.characteristics.size}")
-            }
         }
     }
 
@@ -107,13 +82,15 @@ class MainActivity : AppCompatActivity() {
         startService(gattServiceIntent)
         bindService(gattServiceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
 
-        registerReceiver(connectedReceiver, IntentFilter(BLEService.ACTION_GATT_CONNECTED))
-        registerReceiver(gattServicesReceiver, IntentFilter(BLEService.ACTION_GATT_SERVICES_DISCOVERED))
-
         setContent {
             ElectronicMusicScoreTheme {
                 Text("Hello world!")
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        bluetoothService?.close()
     }
 }

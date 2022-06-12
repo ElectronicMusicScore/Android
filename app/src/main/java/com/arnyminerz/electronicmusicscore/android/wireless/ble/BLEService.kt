@@ -3,25 +3,26 @@ package com.arnyminerz.electronicmusicscore.android.wireless.ble
 import android.annotation.SuppressLint
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Intent
 import android.os.Binder
 import android.os.Build
-import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import com.arnyminerz.electronicmusicscore.android.wireless.ble.BLEService.LocalBinder
 import timber.log.Timber
+import java.util.UUID
+
+val DEVICE_DATA_SERVICE_UUID: UUID = UUID.fromString("0000181c-0000-1000-8000-00805f9b34fb")
+
+val WIFI_SCAN_CHARACTERISTIC_UUID: UUID = UUID.fromString("0000ff02-0000-1000-8000-00805f9b34fb")
 
 /**
- * Makes manipulating BLE connections easier, through accessible functions, and intent broadcasts.
- *
- * Broadcasts:
- * * [ACTION_GATT_CONNECTED]: Gets called when a new connection has been established.
- * * [ACTION_GATT_DISCONNECTED]: Gets called when a device gets disconnected.
+ * Makes manipulating BLE connections easier, through accessible functions.
  *
  * [initialize] must be called before using any of the other functions.
  * @author Arnau Mora
@@ -30,34 +31,6 @@ import timber.log.Timber
  * @see initialize
  */
 class BLEService : Service() {
-    companion object {
-        /**
-         * Gets broadcast by the service when a BLE device gets connected.
-         * @author Arnau Mora
-         * @since 20220609
-         */
-        const val ACTION_GATT_CONNECTED =
-            "com.arnyminerz.electronicmusicscore.android.bluetooth.le.ACTION_GATT_CONNECTED"
-
-        /**
-         * Gets broadcast by the service when a BLE device gets disconnected.
-         * @author Arnau Mora
-         * @since 20220609
-         */
-        const val ACTION_GATT_DISCONNECTED =
-            "com.arnyminerz.electronicmusicscore.android.bluetooth.le.ACTION_GATT_DISCONNECTED"
-
-        /**
-         * Gets broadcast by the service when a service gets discovered in a connected BLE device.
-         * @author Arnau Mora
-         * @since 20220609
-         */
-        const val ACTION_GATT_SERVICES_DISCOVERED =
-            "com.arnyminerz.electronicmusicscore.android.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED"
-
-        const val BROADCAST_INTENT_EXTRA_MAC_KEY = "mac_address"
-    }
-
     /**
      * The binder instance for binding the service.
      * @author Arnau Mora
@@ -81,41 +54,11 @@ class BLEService : Service() {
      */
     private var bluetoothGatt: BluetoothGatt? = null
 
-    /**
-     * A callback that gets updated with the connection status of a request made to [connect].
-     * @author Arnau Mora
-     * @since 20220609
-     * @see connect
-     */
-    private val bluetoothGattCallback = object : BluetoothGattCallback() {
-        @SuppressLint("MissingPermission")
-        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
-            when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> {
-                    broadcastUpdate(
-                        ACTION_GATT_CONNECTED,
-                        Bundle().apply {
-                            gatt?.let {
-                                putString(
-                                    BROADCAST_INTENT_EXTRA_MAC_KEY,
-                                    it.device.address
-                                )
-                            }
-                        }
-                    )
-                    bluetoothGatt?.discoverServices()
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> broadcastUpdate(ACTION_GATT_DISCONNECTED)
-            }
-        }
+    private val clientManagers = hashMapOf<String, ClientManager>()
 
-        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS)
-                broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED)
-            else
-                Timber.w("Discovered services. Status not successful: $status")
-        }
-    }
+    private lateinit var bleHandler: Handler
+
+    private var device: BluetoothDevice? = null
 
     override fun onBind(intent: Intent): IBinder = binder
 
@@ -145,6 +88,11 @@ class BLEService : Service() {
         Timber.d("Getting bluetooth adapter...")
         bluetoothAdapter = bluetoothManager.adapter
 
+        @Suppress("DEPRECATION")
+        bleHandler = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            Handler.createAsync(mainLooper)
+        else Handler()
+
         return if (bluetoothAdapter == null) {
             Timber.e("Could not obtain a Bluetooth Adapter. Device may be incompatible.")
             false
@@ -155,8 +103,7 @@ class BLEService : Service() {
     }
 
     /**
-     * Connects to a device with a MAC address. Broadcasts the result of the connection with action
-     * [ACTION_GATT_CONNECTED] and [ACTION_GATT_DISCONNECTED].
+     * Connects to a device with a MAC address.
      * @author Arnau Mora
      * @since 20220609
      * @param address The MAC address of the device to connect to.
@@ -168,46 +115,33 @@ class BLEService : Service() {
             Timber.e("Address provided for connecting is invalid.")
             return false
         }
-        return bluetoothAdapter?.let { adapter ->
-            try {
-                Timber.d("Getting remote device at $address...")
-                val device = adapter.getRemoteDevice(address)
-                Timber.d("Connecting to the remote device...")
-                bluetoothGatt = device.connectGatt(this, false, bluetoothGattCallback)
-                true
-            } catch (e: IllegalArgumentException) {
-                Timber.e("Device not found with the provided address.")
-                false
-            }
-        } ?: run {
+
+        if (bluetoothAdapter == null) {
             Timber.e("Bluetooth Adapter not initialized.")
-            false
+            return false
         }
-    }
 
-    /**
-     * Returns all the available Gatt services on the currently connected device. May only be
-     * called after receiving [ACTION_GATT_SERVICES_DISCOVERED].
-     * @author Arnau Mora
-     * @since 20220609
-     * @return A list of the available services or null if currently not connected to any device.
-     */
-    fun getSupportedGattServices(): List<BluetoothGattService>? = bluetoothGatt?.services
-
-    /**
-     * Used for broadcasting something when an update has been detected.
-     * @author Arnau Mora
-     * @since 20220609
-     * @param action The name of the action to broadcast.
-     * @param extras Extra data to pass to the broadcast intent.
-     * @see ACTION_GATT_CONNECTED
-     * @see ACTION_GATT_DISCONNECTED
-     */
-    private fun broadcastUpdate(action: String, extras: Bundle = Bundle()) {
-        val intent = Intent(action).apply {
-            putExtras(extras)
+        Timber.d("Getting remote device at $address...")
+        device = bluetoothAdapter!!.getRemoteDevice(address) ?: run {
+            Timber.e("Could not connect to the device at $address.")
+            null
         }
-        sendBroadcast(intent)
+
+        val cm = ClientManager()
+        cm.connect(device!!)
+            .retry(3, 100)
+            .timeout(15_000)
+            .useAutoConnect(false)
+            .done {
+                Timber.i("Connected successfully to device. Scanning wifi...")
+                cm.scanWifiNetworks()
+            }
+            .fail { device, status ->
+                Timber.e("Could not connect to $device. Status: $status")
+            }
+            .enqueue()
+        clientManagers[device!!.address] = cm
+        return true
     }
 
     /**
@@ -216,7 +150,7 @@ class BLEService : Service() {
      * @since 20220609
      */
     @SuppressLint("MissingPermission")
-    private fun close() {
+    fun close() {
         bluetoothGatt?.let { gatt ->
             gatt.close()
             bluetoothGatt = null
@@ -235,5 +169,45 @@ class BLEService : Service() {
          * @since 20220609
          */
         fun getService(): BLEService = this@BLEService
+    }
+
+    private inner class ClientManager : no.nordicsemi.android.ble.BleManager(this) {
+        private var wifiScanCharacteristic: BluetoothGattCharacteristic? = null
+
+        override fun getGattCallback(): BleManagerGattCallback = BleCallbackImpl()
+
+        override fun log(priority: Int, message: String) {
+            Timber.log(priority, message)
+        }
+
+        fun scanWifiNetworks() {
+            readCharacteristic(wifiScanCharacteristic)
+                .done {
+                    Timber.i("Received data for wifi scan.")
+                }
+                .fail { device, status ->
+                    Timber.e("Could not scan for wifi networks from $device. Status: $status")
+                }
+                .with { _, data ->
+                    val dataValue = data.value ?: return@with
+                    val str = String(dataValue)
+                        .let { it.substring(0, it.lastIndexOf((0x19).toChar())) }
+                        .split((0x19).toChar())
+                    Timber.i("Got data for wifi scan: $str")
+                }
+                .enqueue()
+        }
+
+        private inner class BleCallbackImpl : BleManagerGattCallback() {
+            override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean =
+                gatt.getService(DEVICE_DATA_SERVICE_UUID)
+                    ?.getCharacteristic(WIFI_SCAN_CHARACTERISTIC_UUID)
+                    ?.also { wifiScanCharacteristic = it } != null
+
+            override fun onServicesInvalidated() {
+                wifiScanCharacteristic = null
+            }
+
+        }
     }
 }
